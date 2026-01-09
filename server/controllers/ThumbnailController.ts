@@ -174,28 +174,16 @@ export const generateThumbnail = async (req: Request, res: Response) => {
 export const deleteThumbnail = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { userId } = req.session as any;
+    const { userId } = req.session;
 
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    const deleted = await Thumbnail.findOneAndDelete({
+    await Thumbnail.findOneAndDelete({
       _id: id,
       userId,
     });
 
-    if (!deleted) {
-      return res.status(404).json({
-        message: "Thumbnail not found or already deleted",
-      });
-    }
-
-    return res.status(200).json({
-      message: "Thumbnail deleted successfully",
-    });
+    res.status(200).json({ message: "Thumbnail deleted successfully" });
   } catch (error: any) {
-    console.error(error);
-    return res.status(500).json({ message: error.message });
+    console.log(error);
+    res.status(500).json({ message: error.message });
   }
 };

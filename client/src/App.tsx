@@ -8,6 +8,7 @@ import YtPreview from "./pages/YtPreview";
 import Login from "./components/Login";
 import "./globals.css";
 import LenisScroll from "./components/LenisScroll";
+import { Toaster } from "react-hot-toast";
 import { useEffect } from "react";
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
   }, [pathname]);
   return (
     <>
+      <Toaster />
       <LenisScroll />
       <Navbar />
       <Routes>
