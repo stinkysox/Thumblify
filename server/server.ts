@@ -37,6 +37,8 @@ app.use(
 );
 
 // 3. Session Configuration
+
+app.set("trust proxy", 1);
 app.use(
   session({
     secret: process.env.SESSION_SECRET as string,
@@ -49,9 +51,8 @@ app.use(
     cookie: {
       maxAge: 1000 * 60 * 60 * 24 * 7,
       // For Vercel cross-domain to work, these two lines are the "secret sauce"
-      httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "none",
+      sameSite: process.env.NODe_ENV === "production" ? "none" : "lax",
       path: "/",
     },
   })
