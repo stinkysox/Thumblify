@@ -2,11 +2,14 @@ import React, { useEffect, useState } from "react";
 import SoftBackdrop from "./SoftBackdrop";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
+import { Loader2, Mail, Lock, User as UserIcon, LogIn } from "lucide-react";
 
 type AuthState = "login" | "signup";
 
 const Login = () => {
   const [state, setState] = useState<AuthState>("login");
+  const [loading, setLoading] = useState(false);
   const { user, login, signUp } = useAuth();
   const navigate = useNavigate();
 
@@ -23,15 +26,28 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setLoading(true);
 
-    if (state === "login") {
-      await login(formData);
-    } else {
-      await signUp(formData);
+    try {
+      if (state === "login") {
+        await login(formData);
+        toast.success("Welcome back!");
+      } else {
+        await signUp(formData);
+        toast.success("Account created successfully!");
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast.error(
+        error?.response?.data?.message ||
+          "Something went wrong. Please try again."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ Redirect after successful login/signup
+  // Redirect after successful auth
   useEffect(() => {
     if (user) {
       navigate("/");
@@ -39,76 +55,53 @@ const Login = () => {
   }, [user, navigate]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <>
-        <SoftBackdrop />
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <SoftBackdrop />
 
-        <form
-          onSubmit={handleSubmit}
-          className="w-full sm:w-87.5 text-center bg-white/6 border border-white/10 rounded-2xl px-8"
-        >
-          <h1 className="text-white text-3xl mt-10 font-medium">
-            {state === "login" ? "Login" : "Sign up"}
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-[400px] text-center bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl px-8 shadow-2xl overflow-hidden"
+      >
+        <div className="mt-10 mb-8">
+          <h1 className="text-white text-3xl font-semibold tracking-tight">
+            {state === "login" ? "Welcome Back" : "Create Account"}
           </h1>
-
-          <p className="text-gray-400 text-sm mt-2">
-            Please sign in to continue
+          <p className="text-zinc-400 text-sm mt-2">
+            {state === "login"
+              ? "Please sign in to continue your journey"
+              : "Sign up to start generating amazing thumbnails"}
           </p>
+        </div>
 
+        <div className="space-y-4">
           {/* Name field only for signup */}
           {state === "signup" && (
-            <div className="flex items-center mt-6 w-full bg-white/5 ring-2 ring-white/10 focus-within:ring-pink-500/60 h-12 rounded-full overflow-hidden pl-6 gap-2 transition-all">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                className="text-white/60"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="8" r="5" />
-                <path d="M20 21a8 8 0 0 0-16 0" />
-              </svg>
-
+            <div className="relative group">
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-pink-500 transition-colors">
+                <UserIcon size={18} />
+              </div>
               <input
                 type="text"
                 name="name"
-                placeholder="Name"
-                className="w-full bg-transparent text-white placeholder-white/60 border-none outline-none"
+                placeholder="Full Name"
+                className="w-full bg-white/5 border border-white/10 focus:border-pink-500/50 focus:ring-4 focus:ring-pink-500/10 h-12 rounded-2xl pl-12 pr-4 text-white placeholder-zinc-500 outline-none transition-all"
                 value={formData.name}
                 onChange={handleChange}
-                required
+                required={state === "signup"}
               />
             </div>
           )}
 
           {/* Email */}
-          <div className="flex items-center w-full mt-4 bg-white/5 ring-2 ring-white/10 focus-within:ring-pink-500/60 h-12 rounded-full overflow-hidden pl-6 gap-2 transition-all">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              className="text-white/75"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-            </svg>
-
+          <div className="relative group">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-pink-500 transition-colors">
+              <Mail size={18} />
+            </div>
             <input
               type="email"
               name="email"
-              placeholder="Email id"
-              className="w-full bg-transparent text-white placeholder-white/60 border-none outline-none"
+              placeholder="Email Address"
+              className="w-full bg-white/5 border border-white/10 focus:border-pink-500/50 focus:ring-4 focus:ring-pink-500/10 h-12 rounded-2xl pl-12 pr-4 text-white placeholder-zinc-500 outline-none transition-all"
               value={formData.email}
               onChange={handleChange}
               required
@@ -116,68 +109,72 @@ const Login = () => {
           </div>
 
           {/* Password */}
-          <div className="flex items-center mt-4 w-full bg-white/5 ring-2 ring-white/10 focus-within:ring-pink-500/60 h-12 rounded-full overflow-hidden pl-6 gap-2 transition-all">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              className="text-white/75"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-
+          <div className="relative group">
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-pink-500 transition-colors">
+              <Lock size={18} />
+            </div>
             <input
               type="password"
               name="password"
               placeholder="Password"
-              className="w-full bg-transparent text-white placeholder-white/60 border-none outline-none"
+              className="w-full bg-white/5 border border-white/10 focus:border-pink-500/50 focus:ring-4 focus:ring-pink-500/10 h-12 rounded-2xl pl-12 pr-4 text-white placeholder-zinc-500 outline-none transition-all"
               value={formData.password}
               onChange={handleChange}
               required
             />
           </div>
+        </div>
 
-          {/* Forgot password */}
-          <div className="mt-4 text-left">
+        {/* Forgot password - only show on login */}
+        {state === "login" && (
+          <div className="mt-3 text-right">
             <button
               type="button"
-              className="text-sm text-pink-400 hover:underline"
+              className="text-xs text-zinc-400 hover:text-pink-400 transition-colors"
             >
-              Forget password?
+              Forgot password?
             </button>
           </div>
+        )}
 
-          {/* Submit */}
-          <button
-            type="submit"
-            className="mt-2 w-full h-11 rounded-full text-white bg-pink-600 hover:bg-pink-500 transition"
-          >
-            {state === "login" ? "Login" : "Sign up"}
-          </button>
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="mt-8 w-full h-12 rounded-2xl text-white bg-pink-600 hover:bg-pink-500 active:scale-[0.98] transition-all font-medium flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="animate-spin" size={20} />
+              <span>Processing...</span>
+            </>
+          ) : (
+            <>
+              {state === "login" ? <LogIn size={20} /> : null}
+              <span>{state === "login" ? "Login" : "Create Account"}</span>
+            </>
+          )}
+        </button>
 
-          {/* Toggle login/signup */}
-          <p
-            onClick={() =>
-              setState((prev) => (prev === "login" ? "signup" : "login"))
-            }
-            className="text-gray-400 text-sm mt-3 mb-11 cursor-pointer"
-          >
+        {/* Toggle login/signup */}
+        <div className="mt-6 mb-10">
+          <p className="text-zinc-400 text-sm">
             {state === "login"
               ? "Don't have an account?"
               : "Already have an account?"}
-            <span className="text-pink-400 hover:underline ml-1">
-              click here
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setState((prev) => (prev === "login" ? "signup" : "login"));
+                setFormData({ name: "", email: "", password: "" }); // Reset form on switch
+              }}
+              className="text-pink-400 hover:text-pink-300 font-medium ml-2 transition-colors underline-offset-4 hover:underline"
+            >
+              {state === "login" ? "Sign up now" : "Login here"}
+            </button>
           </p>
-        </form>
-      </>
+        </div>
+      </form>
     </div>
   );
 };
