@@ -17,35 +17,41 @@ declare module "express-session" {
 
 const app = express();
 
+// 1. Trust Proxy is essential for Vercel deployment to handle cookies correctly
+app.set("trust proxy", 1);
+
+app.use(express.json());
+
+// 2. Combined CORS configuration (Only one app.use(cors) is needed)
 app.use(
   cors({
     origin: [
-      "http:/localhost:5173",
-      "http:/localhost:3000",
-      "https://thumblify-nine.vercel.app/",
+      "http://localhost:5173",
+      "http://localhost:3000",
+      "https://thumblify-nine.vercel.app", // Ensure no trailing slash here
     ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
-app.use(express.json());
-app.use(
-  cors({
-    origin: ["http://localhost:5173", "http://localhost:3000"],
-    credentials: true,
-  })
-);
-
+// 3. Session Configuration
 app.use(
   session({
     secret: process.env.SESSION_SECRET as string,
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 24 * 7 },
     store: MongoStore.create({
       mongoUrl: process.env.MONGODB_URL as string,
       collectionName: "sessions",
     }),
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+      // For Vercel cross-domain to work, these two lines are the "secret sauce"
+      sameSite: "none",
+      secure: true,
+    },
   })
 );
 
@@ -62,7 +68,6 @@ const port = process.env.PORT || 3000;
 const startServer = async () => {
   try {
     await connectDB();
-
     app.listen(port, () => {
       console.log(`Server running at http://localhost:${port}`);
     });
