@@ -1,9 +1,9 @@
 import React from "react";
 import { Download, Image, Loader2 } from "lucide-react";
 
-// Mock types since they're imported from external file
 type AspectRatio = "16:9" | "1:1" | "9:16";
 interface IThumbnail {
+  _id?: string;
   image_url?: string;
   title?: string;
 }
@@ -27,29 +27,17 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   const onDownload = () => {
     if (!thumbnail?.image_url) return;
-
-    // 1. Create the link
     const link = document.createElement("a");
-
-    // 2. Improve Cloudinary attachment logic
-    // This ensures "fl_attachment" is added right after "/upload/"
     const downloadUrl = thumbnail.image_url.replace(
       "/upload/",
       "/upload/fl_attachment/"
     );
-
     link.href = downloadUrl;
-
-    // 3. Set download attribute (suggests a filename to the browser)
     link.setAttribute(
       "download",
       `thumbnail-${thumbnail._id || "download"}.png`
     );
-
-    // 4. Ensure it works cross-origin by opening in a new context if needed
     link.target = "_self";
-
-    // 5. Append, click, and cleanup
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -57,19 +45,23 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   return (
     <div className="relative w-full mx-auto max-w-2xl">
-      <div className={`relative overflow-hidden ${aspectClasses[aspectRatio]}`}>
-        {/* loading state */}
+      <div
+        className={`relative overflow-hidden rounded-xl bg-zinc-900/50 border border-white/5 ${aspectClasses[aspectRatio]}`}
+      >
+        {/* Loading State */}
         {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/25">
-            <Loader2 className="animate-spin size-8" />
-            <p className="text-white">AI is generating your thumbnail...</p>
-            <p className="text-white/70 text-sm">
-              This may take 10-20 seconds...
-            </p>
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-black/60 backdrop-blur-sm">
+            <Loader2 className="animate-spin size-8 text-pink-500" />
+            <div className="text-center">
+              <p className="text-white font-medium">AI is generating...</p>
+              <p className="text-white/60 text-xs mt-1">
+                This takes about 10-20 seconds
+              </p>
+            </div>
           </div>
         )}
 
-        {/* image preview */}
+        {/* Image Preview */}
         {!isLoading && thumbnail?.image_url && (
           <div className="group relative h-full w-full">
             <img
@@ -77,34 +69,49 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
               alt={thumbnail.title || "Thumbnail preview"}
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 flex items-end justify-center bg-black/10 opacity-0 transition-opacity group-hover:opacity-100">
+
+            {/* Desktop Hover Overlay (Hidden on Mobile) */}
+            <div className="absolute inset-0 hidden md:flex items-end justify-center bg-black/20 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 type="button"
                 onClick={onDownload}
-                className="mb-6 flex items-center gap-2 rounded-md px-5 py-2.5 text-xs font-medium transition bg-white/30 ring-2 ring-white/40 backdrop-blur hover:scale-105 active:scale-95"
+                className="mb-6 flex items-center gap-2 rounded-full px-6 py-2.5 text-sm font-medium transition bg-white text-black hover:bg-zinc-200"
               >
-                <Download size={16} />
-                Download
+                <Download size={18} />
+                Download Thumbnail
               </button>
             </div>
           </div>
         )}
 
-        {/* empty state */}
+        {/* Empty State */}
         {!isLoading && !thumbnail?.image_url && (
-          <div className="absolute inset-0 m-2 flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-white/20 bg-black/25">
-            <Image className="size-10 text-white opacity-50" />
+          <div className="absolute inset-0 m-2 flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed border-white/10">
+            <Image className="size-10 text-white/20" />
             <div className="px-4 text-center">
-              <p className="text-sm text-white font-medium">
-                Generate your first thumbnail
-              </p>
-              <p className="mt-1 text-xs text-zinc-400">
-                Fill out the form and click on generate
+              <p className="text-sm text-zinc-400">
+                Your preview will appear here
               </p>
             </div>
           </div>
         )}
       </div>
+
+      {/* Mobile-Only Action Bar (Always Visible when image exists) */}
+      {!isLoading && thumbnail?.image_url && (
+        <div className="mt-4 flex md:hidden flex-col gap-3">
+          <button
+            onClick={onDownload}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white py-4 text-sm font-bold text-black shadow-lg active:scale-[0.98] transition-transform"
+          >
+            <Download size={20} />
+            Download Image
+          </button>
+          <p className="text-center text-xs text-zinc-500">
+            Long-press the image to save directly to photos
+          </p>
+        </div>
+      )}
     </div>
   );
 };
