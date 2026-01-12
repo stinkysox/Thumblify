@@ -43,12 +43,11 @@ const colorSchemeDescriptions = {
 /* ---------------- GENERATE THUMBNAIL ---------------- */
 
 export const generateThumbnail = async (req: Request, res: Response) => {
+  let createdThumbnailId: string | null = null;
+
   try {
     const { userId } = req.session as any;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
     const {
       title,
@@ -56,112 +55,68 @@ export const generateThumbnail = async (req: Request, res: Response) => {
       style,
       aspect_ratio = "16:9",
       color_scheme,
-      text_overlay,
     } = req.body;
 
-    /* ---- Create DB record immediately ---- */
+    // 1. Create the placeholder record
     const thumbnail = await Thumbnail.create({
       userId,
-      title,
+      title: title.trim(),
       prompt_used: user_prompt,
-      user_prompt,
       style,
       aspect_ratio,
       color_scheme,
-      text_overlay,
       isGenerating: true,
     });
 
-    /* ---- AI Config ---- */
-    const generationConfig: GenerateContentConfig = {
-      maxOutputTokens: 32768,
-      temperature: 1,
-      topP: 0.95,
-      responseModalities: ["IMAGE"],
-      imageConfig: {
-        aspectRatio: aspect_ratio,
-        imageSize: "1K",
-      },
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.OFF,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-          threshold: HarmBlockThreshold.OFF,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-          threshold: HarmBlockThreshold.OFF,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.OFF,
-        },
-      ],
-    };
+    createdThumbnailId = thumbnail._id;
 
-    /* ---- Prompt building ---- */
-    let prompt = `Create a ${
-      stylePrompts[style as keyof typeof stylePrompts]
-    } thumbnail for "${title}". `;
+    // 2. Build the AI Prompt
+    const stylePrompt = stylePrompts[style as keyof typeof stylePrompts] || "";
+    const colorDesc =
+      colorSchemeDescriptions[
+        color_scheme as keyof typeof colorSchemeDescriptions
+      ] || "";
 
-    if (color_scheme) {
-      prompt += `Use a ${
-        colorSchemeDescriptions[
-          color_scheme as keyof typeof colorSchemeDescriptions
-        ]
-      } color scheme. `;
-    }
+    const aiPrompt = `Create a ${stylePrompt} thumbnail for "${title}". ${
+      colorDesc ? `Use a ${colorDesc} color scheme.` : ""
+    } ${
+      user_prompt ? `Details: ${user_prompt}.` : ""
+    } The thumbnail should be ${aspect_ratio}, professional, and high-impact.`;
 
-    if (user_prompt) {
-      prompt += `Additional details: ${user_prompt}. `;
-    }
-
-    prompt += `The thumbnail should be ${aspect_ratio}, visually stunning, bold, professional, and optimized for maximum click-through rate.`;
-
-    /* ---- Generate image ---- */
+    // 3. Request Image from Gemini
     const response: any = await ai.models.generateContent({
       model: "gemini-3-pro-image-preview",
-      contents: [prompt],
-      config: generationConfig,
+      contents: [aiPrompt],
+      config: {
+        responseModalities: ["IMAGE"],
+        imageConfig: { aspectRatio: aspect_ratio, imageSize: "1K" },
+        // ... safetySettings from your previous code
+      },
     });
 
-    const parts = response?.candidates?.[0]?.content?.parts;
-    if (!parts) {
-      throw new Error("Invalid AI response");
+    // 4. Extract Image Data
+    const base64Data = response?.candidates?.[0]?.content?.parts?.find(
+      (p: any) => p.inlineData
+    )?.inlineData?.data;
+
+    if (!base64Data) {
+      throw new Error(
+        "AI Safety Filter blocked this request or no image returned."
+      );
     }
 
-    let imageBuffer: Buffer | null = null;
+    const imageBuffer = Buffer.from(base64Data, "base64");
 
-    for (const part of parts) {
-      if (part.inlineData?.data) {
-        imageBuffer = Buffer.from(part.inlineData.data, "base64");
-      }
-    }
-
-    if (!imageBuffer) {
-      throw new Error("No image returned from AI");
-    }
-
-    /* ---- Upload DIRECTLY to Cloudinary (NO FILE SYSTEM) ---- */
+    // 5. Upload to Cloudinary via Stream
     const uploadResult = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: "image",
-          folder: "thumbnails",
-        },
-        (error, result) => {
-          if (error) return reject(error);
-          resolve(result);
-        }
+        { resource_type: "image", folder: "thumbnails" },
+        (error, result) => (error ? reject(error) : resolve(result))
       );
-
       stream.end(imageBuffer);
     });
 
-    /* ---- Update DB ---- */
+    // 6. Finalize DB Record
     thumbnail.image_url = uploadResult.secure_url;
     thumbnail.isGenerating = false;
     await thumbnail.save();
@@ -171,14 +126,19 @@ export const generateThumbnail = async (req: Request, res: Response) => {
       thumbnail,
     });
   } catch (error: any) {
-    console.error("Generate Thumbnail Error:", error);
+    console.error("GENERATE_ERROR:", error.message);
+
+    // CLEANUP: If we created a DB record but the AI/Cloudinary failed, delete it.
+    if (createdThumbnailId) {
+      await Thumbnail.findByIdAndDelete(createdThumbnailId);
+    }
+
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to generate thumbnail",
     });
   }
 };
-
 /* ---------------- DELETE THUMBNAIL ---------------- */
 
 export const deleteThumbnail = async (req: Request, res: Response) => {

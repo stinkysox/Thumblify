@@ -5,7 +5,7 @@ export interface IThumbnail extends Document {
   title: string;
   description?: string;
   style:
-    | "Bold & Graphic"
+    | "Bold and Graphic" // Updated from & to 'and'
     | "Tech/Futuristic"
     | "Minimalist"
     | "Photorealistic"
@@ -48,7 +48,7 @@ const ThumbnailSchema = new Schema<IThumbnail>(
     style: {
       type: String,
       enum: [
-        "Bold & Graphic",
+        "Bold and Graphic", // Updated to match your frontend state
         "Tech/Futuristic",
         "Minimalist",
         "Photorealistic",
@@ -98,7 +98,6 @@ const ThumbnailSchema = new Schema<IThumbnail>(
   }
 );
 
-// Prevent model overwrite in dev / hot-reload
 const Thumbnail =
   mongoose.models.Thumbnail ||
   mongoose.model<IThumbnail>("Thumbnail", ThumbnailSchema);
