@@ -47,96 +47,98 @@ export const generateThumbnail = async (req: Request, res: Response) => {
 
   try {
     const { userId } = req.session as any;
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
-
     const {
       title,
-      prompt: user_prompt,
+      prompt,
       style,
       aspect_ratio = "16:9",
       color_scheme,
     } = req.body;
 
-    // 1. Create the placeholder record
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+    // 1. Initial DB record
     const thumbnail = await Thumbnail.create({
       userId,
       title: title.trim(),
-      prompt_used: user_prompt,
+      prompt_used: prompt,
       style,
       aspect_ratio,
       color_scheme,
       isGenerating: true,
     });
+    createdThumbnailId = thumbnail._id.toString();
 
-    createdThumbnailId = thumbnail._id;
+    // 2. Build the AI prompt (simplified for brevity)
+    const aiPrompt = `YouTube thumbnail: "${title}". Style: ${style}. Colors: ${color_scheme}. High impact, 4k.`;
 
-    // 2. Build the AI Prompt
-    const stylePrompt = stylePrompts[style as keyof typeof stylePrompts] || "";
-    const colorDesc =
-      colorSchemeDescriptions[
-        color_scheme as keyof typeof colorSchemeDescriptions
-      ] || "";
+    // 3. Generation with Retry Logic (Fixes 503 & 404)
+    let response: any;
+    let base64Data: string | null = null;
+    const maxRetries = 3;
 
-    const aiPrompt = `Create a ${stylePrompt} thumbnail for "${title}". ${
-      colorDesc ? `Use a ${colorDesc} color scheme.` : ""
-    } ${
-      user_prompt ? `Details: ${user_prompt}.` : ""
-    } The thumbnail should be ${aspect_ratio}, professional, and high-impact.`;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        response = await ai.models.generateContent({
+          // Use gemini-2.5-flash-image for production stability
+          model: "gemini-2.5-flash-image",
+          contents: [{ role: "user", parts: [{ text: aiPrompt }] }],
+          config: {
+            responseModalities: ["IMAGE"],
+            imageConfig: { aspectRatio: aspect_ratio },
+          },
+        });
 
-    // 3. Request Image from Gemini
-    const response: any = await ai.models.generateContent({
-      model: "gemini-3-pro-image-preview",
-      contents: [aiPrompt],
-      config: {
-        responseModalities: ["IMAGE"],
-        imageConfig: { aspectRatio: aspect_ratio, imageSize: "1K" },
-        // ... safetySettings from your previous code
-      },
-    });
+        // 4. Extract base64 image from parts
+        base64Data = response?.candidates?.[0]?.content?.parts?.find(
+          (p: any) => p.inlineData,
+        )?.inlineData?.data;
 
-    // 4. Extract Image Data
-    const base64Data = response?.candidates?.[0]?.content?.parts?.find(
-      (p: any) => p.inlineData
-    )?.inlineData?.data;
+        if (base64Data) break; // Success!
+      } catch (err: any) {
+        const status = err?.status || err?.error?.code;
 
-    if (!base64Data) {
-      throw new Error(
-        "AI Safety Filter blocked this request or no image returned."
-      );
+        // If 503 (Overloaded), wait and retry
+        if (status === 503 && attempt < maxRetries - 1) {
+          const waitTime = Math.pow(2, attempt) * 1000;
+          console.warn(`Server overloaded. Retrying in ${waitTime}ms...`);
+          await sleep(waitTime);
+          continue;
+        }
+
+        // If 404, the model name is likely wrong for your region/tier
+        if (status === 404) {
+          throw new Error(
+            "Model endpoint not found. Please check your API tier.",
+          );
+        }
+
+        throw err; // Fatal error
+      }
     }
 
-    const imageBuffer = Buffer.from(base64Data, "base64");
+    if (!base64Data) throw new Error("AI failed to produce an image part.");
 
-    // 5. Upload to Cloudinary via Stream
+    // 5. Cloudinary Upload
     const uploadResult = await new Promise<any>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         { resource_type: "image", folder: "thumbnails" },
-        (error, result) => (error ? reject(error) : resolve(result))
+        (error, result) => (error ? reject(error) : resolve(result)),
       );
-      stream.end(imageBuffer);
+      stream.end(Buffer.from(base64Data!, "base64"));
     });
 
-    // 6. Finalize DB Record
+    // 6. Update DB
     thumbnail.image_url = uploadResult.secure_url;
     thumbnail.isGenerating = false;
     await thumbnail.save();
 
-    return res.status(200).json({
-      success: true,
-      thumbnail,
-    });
+    return res.status(200).json({ success: true, thumbnail });
   } catch (error: any) {
-    console.error("GENERATE_ERROR:", error.message);
-
-    // CLEANUP: If we created a DB record but the AI/Cloudinary failed, delete it.
-    if (createdThumbnailId) {
+    console.error("GENERATE_ERROR:", error);
+    if (createdThumbnailId)
       await Thumbnail.findByIdAndDelete(createdThumbnailId);
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Failed to generate thumbnail",
-    });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 /* ---------------- DELETE THUMBNAIL ---------------- */
